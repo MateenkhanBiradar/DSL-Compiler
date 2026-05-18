@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Compiler Front-End</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fragment+Mono:ital@0;1&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg: #0d0f12;
+  --s1: #131620;
+  --s2: #1a1e2a;
+  --s3: #222638;
+  --border: #2a2f45;
+  --border2: #363d58;
+  --gold: #f0c060;
+  --cyan: #4dd9c0;
+  --red: #f05870;
+  --purple: #b07ef0;
+  --green: #60d090;
+  --blue: #60b0f0;
+  --orange: #f0a060;
+  --text: #c0c4dc;
+  --muted: #505870;
+  --head: #e8ecff;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Fragment Mono', monospace;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  padding: 0.7rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.topbar h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--head);
+  letter-spacing: -0.01em;
+}
+.topbar h1 span { color: var(--cyan); }
+.tag {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+  border: 1px solid rgba(77,217,192,0.3);
+  padding: 0.15rem 0.5rem;
+  border-radius: 2px;
+}
+.spacer { flex: 1; }
+.btn {
+  font-family: 'Fragment Mono', monospace;
+  font-size: 0.72rem;
+  padding: 0.38rem 0.9rem;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid;
+  transition: all 0.15s;
+  letter-spacing: 0.04em;
+}
+.btn-run {
+  background: var(--cyan);
+  color: var(--bg);
+  border-color: var(--cyan);
+  font-weight: 700;
+}
+.btn-run:hover { background: #3dc8b0; }
+.btn-clear {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border2);
+}
+.btn-clear:hover { color: var(--red); border-color: var(--red); }
+.btn-example {
+  background: transparent;
+  color: var(--gold);
+  border-color: rgba(240,192,96,0.3);
+}
+.btn-example:hover { background: rgba(240,192,96,0.08); }
+
+/* ── MAIN LAYOUT ── */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  flex: 1;
+  min-height: 0;
+}
+@media(max-width:800px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.pane {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  overflow: hidden;
+}
+.pane-full { grid-column: 1 / -1; }
+
+.pane-head {
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+.pane-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--head);
+}
+.phase-badge {
+  font-size: 0.58rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.ph1 { background: rgba(77,217,192,0.15);  color: var(--cyan);   }
+.ph2 { background: rgba(176,126,240,0.15); color: var(--purple); }
+.ph3 { background: rgba(96,176,240,0.15);  color: var(--blue);   }
+.ph4 { background: rgba(96,208,144,0.15);  color: var(--green);  }
+
+.pane-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0.8rem;
+  min-height: 0;
+}
+
+/* ── EDITOR ── */
+#editor {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  background: transparent;
+  color: var(--text);
+  font-family: 'Fragment Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+  border: none;
+  outline: none;
+  resize: none;
+  tab-size: 2;
+}
+#editor::placeholder { color: var(--muted); }
+
+/* ── TOKEN TABLE ── */
+.tok-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.tok-table th {
+  background: var(--s2);
+  color: var(--muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  padding: 0.35rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top:0;
+}
+.tok-table td {
+  padding: 0.3rem 0.65rem;
+  border-bottom: 1px solid rgba(42,47,69,0.5);
+}
+.tok-table tr:hover td { background: var(--s2); }
+.tk { font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 2px; font-weight:600; }
+.tk-KW  { background:rgba(176,126,240,0.15); color:var(--purple); }
+.tk-ID  { background:rgba(96,176,240,0.15);  color:var(--blue);   }
+.tk-NUM { background:rgba(96,208,144,0.15);  color:var(--green);  }
+.tk-OP  { background:rgba(240,88,112,0.15);  color:var(--red);    }
+.tk-DEL { background:rgba(240,192,96,0.15);  color:var(--gold);   }
+.tk-REL { background:rgba(240,160,96,0.15);  color:var(--orange); }
+
+/* ── PARSE TREE ── */
+.tree { font-size: 0.78rem; line-height: 1.9; }
+.tree ul { padding-left: 1.4rem; list-style: none; }
+.tree li { position: relative; }
+.tree li::before {
+  content: '├─ ';
+  color: var(--border2);
+  position: absolute;
+  left: -1.4rem;
+}
+.tree li:last-child::before { content: '└─ '; }
+.tn-prog  { color: var(--cyan); font-weight:600; }
+.tn-stmt  { color: var(--blue); }
+.tn-expr  { color: var(--orange); }
+.tn-cond  { color: var(--red); }
+.tn-leaf  { color: var(--green); }
+.tn-decl  { color: var(--purple); }
+.tn-op    { color: var(--gold); }
+
+/* ── SYMBOL TABLE ── */
+.sym-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.sym-table th {
+  background: var(--s2);
+  color: var(--muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  padding: 0.35rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top:0;
+}
+.sym-table td { padding: 0.3rem 0.65rem; border-bottom: 1px solid rgba(42,47,69,0.5); }
+.sym-table tr:hover td { background: var(--s2); }
+.ty-int   { color: var(--cyan); }
+.ty-float { color: var(--orange); }
+
+/* ── TAC ── */
+.tac-line {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.22rem 0;
+  border-bottom: 1px solid rgba(42,47,69,0.3);
+  font-size: 0.8rem;
+}
+.tac-line:hover { background: var(--s2); }
+.tac-num { color: var(--muted); font-size: 0.62rem; min-width: 28px; text-align:right; }
+.tac-label { color: var(--purple); font-weight:600; }
+.tac-assign { color: var(--text); }
+.tac-op   { color: var(--red); }
+.tac-var  { color: var(--blue); }
+.tac-num2 { color: var(--green); }
+.tac-kw   { color: var(--gold); font-weight:600; }
+.tac-tmp  { color: var(--orange); }
+
+/* ── ERROR ── */
+.error-box {
+  background: rgba(240,88,112,0.08);
+  border: 1px solid rgba(240,88,112,0.3);
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  color: var(--red);
+  font-size: 0.8rem;
+  margin: 0.5rem 0;
+}
+.error-box::before { content: '✖ '; }
+
+.ok-box {
+  background: rgba(96,208,144,0.06);
+  border: 1px solid rgba(96,208,144,0.2);
+  border-radius: 4px;
+  padding: 0.5rem 0.8rem;
+  color: var(--green);
+  font-size: 0.72rem;
+  margin-bottom: 0.6rem;
+}
+.ok-box::before { content: '✔ '; }
+
+.empty-msg { color: var(--muted); font-size:0.78rem; padding:0.5rem 0; font-style:italic; }
+
+/* ── STATUS BAR ── */
+.statusbar {
+  background: var(--s1);
+  border-top: 1px solid var(--border);
+  padding: 0.3rem 1rem;
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.status-item span { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="tag">LIVE DEMO</div>
+  <h1><span>Compiler</span> Front-End — DSL</h1>
+  <div class="spacer"></div>
+  <button class="btn btn-example" onclick="loadExample(1)">Example 1</button>
+  <button class="btn btn-example" onclick="loadExample(2)">Example 2</button>
+  <button class="btn btn-example" onclick="loadExample(3)">Example 3</button>
+  <button class="btn btn-clear"  onclick="clearAll()">Clear</button>
+  <button class="btn btn-run"    onclick="compile()">▶ Compile</button>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- EDITOR -->
+  <div class="pane">
+    <div class="pane-head">
+      <div class="pane-title">SOURCE CODE</div>
+      <div class="phase-badge ph1">DSL Input</div>
+    </div>
+    <div class="pane-body" style="padding:0;">
+      <textarea id="editor" spellcheck="false" placeholder="Type your DSL program here, or click an Example button above..."></textarea>
+    </div>
+  </div>
+
+  <!-- TOKENS -->
+  <div class="pane">
+    <div class="pane-head">
+      <div class="pane-title">PHASE 1 — LEXICAL ANALYSIS</div>
+      <div class="phase-badge ph1">Tokens</div>
+    </div>
+    <div class="pane-body" id="out-tokens">
+      <div class="empty-msg">Run compiler to see tokens...</div>
+    </div>
+  </div>
+
+  <!-- PARSE TREE -->
+  <div class="pane">
+    <div class="pane-head">
+      <div class="pane-title">PHASE 2 — SYNTAX ANALYSIS</div>
+      <div class="phase-badge ph2">Parse Tree</div>
+    </div>
+    <div class="pane-body" id="out-parse">
+      <div class="empty-msg">Run compiler to see parse tree...</div>
+    </div>
+  </div>
+
+  <!-- SYMBOL TABLE -->
+  <div class="pane">
+    <div class="pane-head">
+      <div class="pane-title">PHASE 3 — SEMANTIC ANALYSIS</div>
+      <div class="phase-badge ph3">Symbol Table</div>
+    </div>
+    <div class="pane-body" id="out-sym">
+      <div class="empty-msg">Run compiler to see symbol table...</div>
+    </div>
+  </div>
+
+  <!-- TAC -->
+  <div class="pane pane-full">
+    <div class="pane-head">
+      <div class="pane-title">PHASE 4 — INTERMEDIATE CODE GENERATION</div>
+      <div class="phase-badge ph4">Three-Address Code (TAC)</div>
+    </div>
+    <div class="pane-body" id="out-tac">
+      <div class="empty-msg">Run compiler to see TAC output...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar" id="statusbar">
+  <div>status: <span id="st-status">ready</span></div>
+  <div>tokens: <span id="st-tokens">0</span></div>
+  <div>symbols: <span id="st-symbols">0</span></div>
+  <div>tac lines: <span id="st-tac">0</span></div>
+  <div>errors: <span id="st-errors" style="color:var(--red)">0</span></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// EXAMPLES
+// ═══════════════════════════════════════════════════════════════
+const EXAMPLES = {
+  1: `program calcArea
+  var int length, width, area;
+  length = 10;
+  width = 5;
+  area = length * width;
+  print area;
+end`,
+
+  2: `program gradeCheck
+  var int score, grade;
+  score = 85;
+  if (score > 60) do
+    grade = 1;
+    print grade;
+  else
+    grade = 0;
+    print grade;
+  end
+end`,
+
+  3: `program sumLoop
+  var int i, total, n;
+  n = 5;
+  total = 0;
+  i = 1;
+  while (i <= n) do
+    total = total + i;
+    i = i + 1;
+  end
+  print total;
+end`
+};
+
+function loadExample(n) {
+  document.getElementById('editor').value = EXAMPLES[n];
+  compile();
+}
+function clearAll() {
+  document.getElementById('editor').value = '';
+  ['out-tokens','out-parse','out-sym','out-tac'].forEach(id => {
+    document.getElementById(id).innerHTML = '<div class="empty-msg">Run compiler to see output...</div>';
+  });
+  setStatus('ready', 0, 0, 0, 0);
+}
+
+function setStatus(st, tok, sym, tac, err) {
+  document.getElementById('st-status').textContent  = st;
+  document.getElementById('st-tokens').textContent  = tok;
+  document.getElementById('st-symbols').textContent = sym;
+  document.getElementById('st-tac').textContent     = tac;
+  document.getElementById('st-errors').textContent  = err;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LEXER
+// ═══════════════════════════════════════════════════════════════
+const KEYWORDS = new Set(['program','end','var','int','float','if','else',
+                          'while','do','print','read']);
+
+function lexer(src) {
+  const tokens = [];
+  const errors = [];
+  let i = 0, line = 1;
+
+  const peek  = () => src[i] || '';
+  const peek2 = () => (src[i] || '') + (src[i+1] || '');
+  const advance = () => { if (src[i] === '\n') line++; return src[i++]; };
+
+  while (i < src.length) {
+    // Skip whitespace
+    if (/\s/.test(peek())) { advance(); continue; }
+    // Skip single-line comments
+    if (peek2() === '//') {
+      while (i < src.length && peek() !== '\n') advance();
+      continue;
+    }
+    // Skip multi-line comments
+    if (peek2() === '/*') {
+      advance(); advance();
+      while (i < src.length && peek2() !== '*/') advance();
+      if (i < src.length) { advance(); advance(); }
+      continue;
+    }
+
+    const start = i;
+    const ln = line;
+
+    // Float / Number
+    if (/\d/.test(peek())) {
+      let num = '';
+      while (/\d/.test(peek())) num += advance();
+      let isFloat = false;
+      if (peek() === '.' && /\d/.test(src[i+1]||'')) {
+        num += advance();
+        while (/\d/.test(peek())) num += advance();
+        isFloat = true;
+      }
+      tokens.push({ type: isFloat ? 'FLOAT' : 'NUMBER', val: num, line: ln });
+      continue;
+    }
+
+    // Identifier / Keyword
+    if (/[A-Za-z_]/.test(peek())) {
+      let id = '';
+      while (/[A-Za-z0-9_]/.test(peek())) id += advance();
+      tokens.push({ type: KEYWORDS.has(id) ? 'KEYWORD' : 'ID', val: id, line: ln });
+      continue;
+    }
+
+    // Two-char relops
+    const two = peek2();
+    if (['==','!=','<=','>='].includes(two)) {
+      tokens.push({ type: 'RELOP', val: two, line: ln });
+      advance(); advance();
+      continue;
+    }
+    // Single-char relops
+    if (['<','>'].includes(peek())) {
+      tokens.push({ type: 'RELOP', val: advance(), line: ln });
+      continue;
+    }
+    // Operators
+    if (['+','-','*','/'].includes(peek())) {
+      tokens.push({ type: 'OP', val: advance(), line: ln });
+      continue;
+    }
+    // Assignment
+    if (peek() === '=') {
+      tokens.push({ type: 'ASSIGN', val: advance(), line: ln });
+      continue;
+    }
+    // Delimiters
+    if ([';','(',')',',' ].includes(peek())) {
+      const ch = advance();
+      const tmap = {';':'SEMI','(':'LPAREN',')':'RPAREN',',':'COMMA'};
+      tokens.push({ type: tmap[ch], val: ch, line: ln });
+      continue;
+    }
+
+    errors.push(`Line ${ln}: Unknown character '${peek()}'`);
+    advance();
+  }
+
+  return { tokens, errors };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PARSER — recursive descent, returns AST nodes
+// ═══════════════════════════════════════════════════════════════
+class Parser {
+  constructor(tokens) {
+    this.toks = tokens.filter(t => t.type !== 'COMMENT');
+    this.pos  = 0;
+    this.errors = [];
+  }
+
+  cur()  { return this.toks[this.pos] || { type:'EOF', val:'', line:-1 }; }
+  peek() { return this.toks[this.pos+1] || { type:'EOF', val:'' }; }
+
+  eat(type, val) {
+    const t = this.cur();
+    if (t.type === type && (!val || t.val === val)) { this.pos++; return t; }
+    this.errors.push(`Line ${t.line}: Expected [${type}${val?'='+val:''}] got [${t.type}='${t.val}']`);
+    this.pos++;
+    return t;
+  }
+
+  match(type, val) {
+    const t = this.cur();
+    return t.type === type && (!val || t.val === val);
+  }
+
+  parseProgram() {
+    const node = { tag: 'Program', children: [] };
+    this.eat('KEYWORD', 'program');
+    node.name = this.eat('ID').val;
+    node.decls = this.parseDeclList();
+    node.stmts = this.parseStmtList();
+    this.eat('KEYWORD', 'end');
+    return node;
+  }
+
+  parseDeclList() {
+    const decls = [];
+    while (this.match('KEYWORD','var')) {
+      decls.push(this.parseDecl());
+    }
+    return decls;
+  }
+
+  parseDecl() {
+    const node = { tag: 'Decl' };
+    this.eat('KEYWORD', 'var');
+    node.dtype = this.eat('KEYWORD').val;
+    node.ids = [ this.eat('ID').val ];
+    while (this.match('COMMA')) {
+      this.eat('COMMA');
+      node.ids.push(this.eat('ID').val);
+    }
+    this.eat('SEMI');
+    return node;
+  }
+
+  parseStmtList() {
+    const stmts = [];
+    while (!this.match('KEYWORD','end') && !this.match('KEYWORD','else') && this.cur().type !== 'EOF') {
+      stmts.push(this.parseStmt());
+    }
+    return stmts;
+  }
+
+  parseStmt() {
+    const t = this.cur();
+    if (t.type === 'KEYWORD' && t.val === 'if')    return this.parseIf();
+    if (t.type === 'KEYWORD' && t.val === 'while') return this.parseWhile();
+    if (t.type === 'KEYWORD' && t.val === 'print') return this.parsePrint();
+    if (t.type === 'KEYWORD' && t.val === 'read')  return this.parseRead();
+    if (t.type === 'ID') return this.parseAssign();
+    this.errors.push(`Line ${t.line}: Unexpected token '${t.val}'`);
+    this.pos++;
+    return { tag: 'Error', val: t.val };
+  }
+
+  parseAssign() {
+    const id = this.eat('ID').val;
+    this.eat('ASSIGN');
+    const expr = this.parseExpr();
+    this.eat('SEMI');
+    return { tag: 'Assign', id, expr };
+  }
+
+  parseIf() {
+    this.eat('KEYWORD', 'if');
+    this.eat('LPAREN');
+    const cond = this.parseCond();
+    this.eat('RPAREN');
+    this.eat('KEYWORD', 'do');
+    const then = this.parseStmtList();
+    let els = [];
+    if (this.match('KEYWORD','else')) {
+      this.eat('KEYWORD','else');
+      els = this.parseStmtList();
+    }
+    this.eat('KEYWORD','end');
+    return { tag: 'If', cond, then, els };
+  }
+
+  parseWhile() {
+    this.eat('KEYWORD', 'while');
+    this.eat('LPAREN');
+    const cond = this.parseCond();
+    this.eat('RPAREN');
+    this.eat('KEYWORD', 'do');
+    const body = this.parseStmtList();
+    this.eat('KEYWORD', 'end');
+    return { tag: 'While', cond, body };
+  }
+
+  parsePrint() {
+    this.eat('KEYWORD', 'print');
+    const id = this.eat('ID').val;
+    this.eat('SEMI');
+    return { tag: 'Print', id };
+  }
+
+  parseRead() {
+    this.eat('KEYWORD', 'read');
+    const id = this.eat('ID').val;
+    this.eat('SEMI');
+    return { tag: 'Read', id };
+  }
+
+  parseCond() {
+    const left  = this.parseExpr();
+    const op    = this.eat('RELOP').val;
+    const right = this.parseExpr();
+    return { tag: 'Cond', left, op, right };
+  }
+
+  parseExpr() {
+    let node = this.parseTerm();
+    while (this.match('OP') && ['+','-'].includes(this.cur().val)) {
+      const op = this.eat('OP').val;
+      const r  = this.parseTerm();
+      node = { tag: 'BinOp', op, left: node, right: r };
+    }
+    return node;
+  }
+
+  parseTerm() {
+    let node = this.parseFactor();
+    while (this.match('OP') && ['*','/'].includes(this.cur().val)) {
+      const op = this.eat('OP').val;
+      const r  = this.parseFactor();
+      node = { tag: 'BinOp', op, left: node, right: r };
+    }
+    return node;
+  }
+
+  parseFactor() {
+    if (this.match('LPAREN')) {
+      this.eat('LPAREN');
+      const e = this.parseExpr();
+      this.eat('RPAREN');
+      return e;
+    }
+    if (this.match('ID'))     return { tag: 'Var',   val: this.eat('ID').val };
+    if (this.match('NUMBER')) return { tag: 'Num',   val: this.eat('NUMBER').val };
+    if (this.match('FLOAT'))  return { tag: 'FNum',  val: this.eat('FLOAT').val };
+    const t = this.cur();
+    this.errors.push(`Line ${t.line}: Expected expression, got '${t.val}'`);
+    this.pos++;
+    return { tag: 'Err', val: t.val };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEMANTIC ANALYSIS — symbol table + type check
+// ═══════════════════════════════════════════════════════════════
+function semanticAnalysis(ast) {
+  const symTable = new Map();
+  const errors   = [];
+
+  function declareVar(name, dtype, line) {
+    if (symTable.has(name)) {
+      errors.push(`Semantic: '${name}' already declared`);
+    } else {
+      symTable.set(name, { type: dtype, value: null, usages: 0 });
+    }
+  }
+
+  function lookupVar(name) {
+    if (!symTable.has(name)) {
+      errors.push(`Semantic: '${name}' used before declaration`);
+      return 'unknown';
+    }
+    symTable.get(name).usages++;
+    return symTable.get(name).type;
+  }
+
+  function typeOfExpr(node) {
+    if (!node) return 'unknown';
+    if (node.tag === 'Var')  return lookupVar(node.val);
+    if (node.tag === 'Num')  return 'int';
+    if (node.tag === 'FNum') return 'float';
+    if (node.tag === 'BinOp') {
+      const lt = typeOfExpr(node.left);
+      const rt = typeOfExpr(node.right);
+      if (lt !== rt && lt !== 'unknown' && rt !== 'unknown') {
+        errors.push(`Semantic: Type mismatch in '${node.op}': ${lt} vs ${rt}`);
+      }
+      return lt === 'float' || rt === 'float' ? 'float' : 'int';
+    }
+    return 'unknown';
+  }
+
+  function analyseDecl(d) {
+    d.ids.forEach(id => declareVar(id, d.dtype));
+  }
+
+  function analyseStmt(s) {
+    if (!s) return;
+    if (s.tag === 'Assign') {
+      const rhsType = typeOfExpr(s.expr);
+      const lhsType = lookupVar(s.id);
+      if (lhsType !== 'unknown' && rhsType !== 'unknown' && lhsType !== rhsType) {
+        errors.push(`Semantic: Cannot assign ${rhsType} to ${lhsType} variable '${s.id}'`);
+      }
+      if (symTable.has(s.id)) symTable.get(s.id).value = '...';
+    }
+    if (s.tag === 'If' || s.tag === 'While') {
+      typeOfExpr(s.cond && s.cond.left);
+      typeOfExpr(s.cond && s.cond.right);
+      (s.then || s.body || []).forEach(analyseStmt);
+      (s.els  || []).forEach(analyseStmt);
+    }
+    if (s.tag === 'Print' || s.tag === 'Read') lookupVar(s.id);
+  }
+
+  if (ast) {
+    (ast.decls || []).forEach(analyseDecl);
+    (ast.stmts || []).forEach(analyseStmt);
+  }
+
+  return { symTable, errors };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAC GENERATOR
+// ═══════════════════════════════════════════════════════════════
+class TACGen {
+  constructor() {
+    this.code  = [];
+    this._tmp  = 0;
+    this._lbl  = 0;
+  }
+  tmp()   { return 't' + (++this._tmp); }
+  label() { return 'L' + (++this._lbl); }
+  emit(s) { this.code.push(s); }
+
+  genExpr(node) {
+    if (!node) return '?';
+    if (node.tag === 'Var' || node.tag === 'Num' || node.tag === 'FNum') return node.val;
+    if (node.tag === 'BinOp') {
+      const l = this.genExpr(node.left);
+      const r = this.genExpr(node.right);
+      const t = this.tmp();
+      this.emit(`${t} = ${l} ${node.op} ${r}`);
+      return t;
+    }
+    return '?';
+  }
+
+  genStmt(s) {
+    if (!s) return;
+    if (s.tag === 'Assign') {
+      const rhs = this.genExpr(s.expr);
+      this.emit(`${s.id} = ${rhs}`);
+    }
+    if (s.tag === 'Print') this.emit(`print ${s.id}`);
+    if (s.tag === 'Read')  this.emit(`read  ${s.id}`);
+
+    if (s.tag === 'If') {
+      const lTrue = this.label(), lFalse = this.label(), lEnd = this.label();
+      const cl = this.genExpr(s.cond.left);
+      const cr = this.genExpr(s.cond.right);
+      this.emit(`if ${cl} ${s.cond.op} ${cr} goto ${lTrue}`);
+      this.emit(`goto ${lFalse}`);
+      this.emit(`${lTrue}:`);
+      s.then.forEach(st => this.genStmt(st));
+      if (s.els && s.els.length) {
+        this.emit(`goto ${lEnd}`);
+        this.emit(`${lFalse}:`);
+        s.els.forEach(st => this.genStmt(st));
+        this.emit(`${lEnd}:`);
+      } else {
+        this.emit(`${lFalse}:`);
+      }
+    }
+
+    if (s.tag === 'While') {
+      const lStart = this.label(), lEnd = this.label();
+      this.emit(`${lStart}:`);
+      const cl = this.genExpr(s.cond.left);
+      const cr = this.genExpr(s.cond.right);
+      this.emit(`if NOT (${cl} ${s.cond.op} ${cr}) goto ${lEnd}`);
+      s.body.forEach(st => this.genStmt(st));
+      this.emit(`goto ${lStart}`);
+      this.emit(`${lEnd}:`);
+    }
+  }
+
+  gen(ast) {
+    if (!ast) return;
+    this.emit(`; === Program: ${ast.name} ===`);
+    (ast.stmts || []).forEach(s => this.genStmt(s));
+    this.emit('; === End ===');
+    return this.code;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER HELPERS
+// ═══════════════════════════════════════════════════════════════
+function renderTokens(tokens, errors) {
+  let html = '';
+  errors.forEach(e => { html += `<div class="error-box">${e}</div>`; });
+  if (!tokens.length) { html += '<div class="empty-msg">No tokens.</div>'; return html; }
+
+  const typeClass = { KEYWORD:'tk-KW', ID:'tk-ID', NUMBER:'tk-NUM', FLOAT:'tk-NUM',
+                      OP:'tk-OP', RELOP:'tk-REL', ASSIGN:'tk-OP',
+                      SEMI:'tk-DEL', LPAREN:'tk-DEL', RPAREN:'tk-DEL', COMMA:'tk-DEL' };
+
+  html += `<div class="ok-box">Lexed ${tokens.length} tokens successfully</div>`;
+  html += '<table class="tok-table"><thead><tr><th>#</th><th>Type</th><th>Value</th><th>Line</th></tr></thead><tbody>';
+  tokens.forEach((t, i) => {
+    const cls = typeClass[t.type] || 'tk-DEL';
+    html += `<tr><td style="color:var(--muted)">${i+1}</td>
+      <td><span class="tk ${cls}">${t.type}</span></td>
+      <td>${escH(t.val)}</td>
+      <td style="color:var(--muted)">${t.line}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderTree(ast, parserErrors) {
+  let html = '';
+  parserErrors.forEach(e => { html += `<div class="error-box">${e}</div>`; });
+  if (!ast) { html += '<div class="empty-msg">No parse tree (fix errors first).</div>'; return html; }
+
+  html += `<div class="ok-box">Parsed successfully</div>`;
+  html += '<div class="tree">' + nodeToHTML(ast) + '</div>';
+  return html;
+}
+
+function nodeToHTML(node, depth) {
+  if (!node) return '';
+  if (node.tag === 'Program') {
+    let s = `<span class="tn-prog">Program</span> <span class="tn-leaf">"${node.name}"</span><ul>`;
+    if (node.decls && node.decls.length) {
+      s += `<li><span class="tn-decl">Declarations</span><ul>`;
+      node.decls.forEach(d => { s += `<li>${nodeToHTML(d)}</li>`; });
+      s += '</ul></li>';
+    }
+    s += `<li><span class="tn-stmt">Statements</span><ul>`;
+    (node.stmts || []).forEach(st => { s += `<li>${nodeToHTML(st)}</li>`; });
+    s += '</ul></li></ul>';
+    return s;
+  }
+  if (node.tag === 'Decl')
+    return `<span class="tn-decl">var ${node.dtype}</span> <span class="tn-leaf">${node.ids.join(', ')}</span>`;
+  if (node.tag === 'Assign')
+    return `<span class="tn-stmt">Assign</span> <span class="tn-leaf">${node.id}</span> <span class="tn-op">=</span><ul><li>${nodeToHTML(node.expr)}</li></ul>`;
+  if (node.tag === 'BinOp')
+    return `<span class="tn-expr">BinOp</span> <span class="tn-op">'${node.op}'</span><ul><li>${nodeToHTML(node.left)}</li><li>${nodeToHTML(node.right)}</li></ul>`;
+  if (node.tag === 'Var')   return `<span class="tn-leaf">Var(${node.val})</span>`;
+  if (node.tag === 'Num')   return `<span class="tn-leaf" style="color:var(--green)">Int(${node.val})</span>`;
+  if (node.tag === 'FNum')  return `<span class="tn-leaf" style="color:var(--orange)">Float(${node.val})</span>`;
+  if (node.tag === 'Cond')
+    return `<span class="tn-cond">Cond</span> <span class="tn-op">${node.op}</span><ul><li>${nodeToHTML(node.left)}</li><li>${nodeToHTML(node.right)}</li></ul>`;
+  if (node.tag === 'If') {
+    let s = `<span class="tn-stmt">If</span><ul><li><span class="tn-cond">Condition</span><ul><li>${nodeToHTML(node.cond)}</li></ul></li>`;
+    s += `<li><span class="tn-stmt">Then</span><ul>${(node.then||[]).map(st=>`<li>${nodeToHTML(st)}</li>`).join('')}</ul></li>`;
+    if (node.els && node.els.length)
+      s += `<li><span class="tn-stmt">Else</span><ul>${node.els.map(st=>`<li>${nodeToHTML(st)}</li>`).join('')}</ul></li>`;
+    s += '</ul>';
+    return s;
+  }
+  if (node.tag === 'While') {
+    return `<span class="tn-stmt">While</span><ul><li><span class="tn-cond">Condition</span><ul><li>${nodeToHTML(node.cond)}</li></ul></li>
+      <li><span class="tn-stmt">Body</span><ul>${(node.body||[]).map(st=>`<li>${nodeToHTML(st)}</li>`).join('')}</ul></li></ul>`;
+  }
+  if (node.tag === 'Print') return `<span class="tn-stmt">Print</span> <span class="tn-leaf">${node.id}</span>`;
+  if (node.tag === 'Read')  return `<span class="tn-stmt">Read</span> <span class="tn-leaf">${node.id}</span>`;
+  return `<span style="color:var(--muted)">${node.tag}</span>`;
+}
+
+function renderSym(symTable, semErrors) {
+  let html = '';
+  semErrors.forEach(e => { html += `<div class="error-box">${e}</div>`; });
+  if (!symTable || !symTable.size) {
+    html += '<div class="empty-msg">No symbols declared.</div>';
+    return html;
+  }
+  if (!semErrors.length) html += `<div class="ok-box">Semantic analysis passed — ${symTable.size} symbol(s)</div>`;
+  html += '<table class="sym-table"><thead><tr><th>Name</th><th>Type</th><th>Value</th><th>Usages</th></tr></thead><tbody>';
+  symTable.forEach((info, name) => {
+    const tc = info.type === 'float' ? 'ty-float' : 'ty-int';
+    html += `<tr><td style="color:var(--head)">${name}</td>
+      <td><span class="${tc}">${info.type}</span></td>
+      <td style="color:var(--muted)">${info.value ?? '—'}</td>
+      <td style="color:var(--muted)">${info.usages}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderTAC(code) {
+  if (!code || !code.length) return '<div class="empty-msg">No TAC generated.</div>';
+  let html = `<div class="ok-box">${code.length} TAC instructions generated</div>`;
+
+  code.forEach((line, i) => {
+    if (line.startsWith(';')) {
+      html += `<div class="tac-line"><span class="tac-num"></span><span style="color:var(--muted);font-style:italic">${escH(line)}</span></div>`;
+      return;
+    }
+    if (/^L\d+:$/.test(line.trim())) {
+      html += `<div class="tac-line"><span class="tac-num"></span><span class="tac-label">${escH(line)}</span></div>`;
+      return;
+    }
+    html += `<div class="tac-line"><span class="tac-num">${i+1}</span><span>${colorizeTAC(line)}</span></div>`;
+  });
+  return html;
+}
+
+function colorizeTAC(line) {
+  // colorize: labels, keywords, temps, vars, numbers, operators
+  return escH(line)
+    .replace(/\b(goto|if|NOT|print|read)\b/g, '<span class="tac-kw">$1</span>')
+    .replace(/\b(t\d+)\b/g, '<span class="tac-tmp">$1</span>')
+    .replace(/\b(L\d+)\b/g, '<span class="tac-label">$1</span>')
+    .replace(/\b(\d+\.?\d*)\b/g, '<span class="tac-num2">$1</span>')
+    .replace(/([+\-*/=!<>]+)/g, '<span class="tac-op">$1</span>')
+    .replace(/\b([a-z][a-zA-Z0-9_]*)\b/g, m =>
+      !['goto','if','NOT','print','read'].includes(m) ? `<span class="tac-var">${m}</span>` : m
+    );
+}
+
+function escH(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN COMPILE
+// ═══════════════════════════════════════════════════════════════
+function compile() {
+  const src = document.getElementById('editor').value.trim();
+  if (!src) { clearAll(); return; }
+
+  // Phase 1 — Lex
+  const { tokens, errors: lexErrors } = lexer(src);
+  document.getElementById('out-tokens').innerHTML = renderTokens(tokens, lexErrors);
+
+  // Phase 2 — Parse
+  const parser = new Parser(tokens);
+  let ast = null;
+  try { ast = parser.parseProgram(); } catch(e) { parser.errors.push('Parse exception: ' + e.message); }
+  document.getElementById('out-parse').innerHTML = renderTree(ast, parser.errors);
+
+  // Phase 3 — Semantic
+  const { symTable, errors: semErrors } = semanticAnalysis(ast);
+  document.getElementById('out-sym').innerHTML = renderSym(symTable, semErrors);
+
+  // Phase 4 — TAC
+  const gen  = new TACGen();
+  const code = gen.gen(ast);
+  document.getElementById('out-tac').innerHTML = renderTAC(code);
+
+  // Status
+  const totalErrors = lexErrors.length + parser.errors.length + semErrors.length;
+  setStatus(
+    totalErrors ? '⚠ errors' : '✔ ok',
+    tokens.length,
+    symTable.size,
+    code ? code.filter(l => !l.startsWith(';')).length : 0,
+    totalErrors
+  );
+}
+
+// Load example 1 on start
+window.onload = () => loadExample(1);
+</script>
+</body>
+</html>
